@@ -107,5 +107,4 @@ def doClassify(argv):
     return res
 
 if __name__ == "__main__":
-    #do_classify_from_url('http://10pm.com/files/lk9wdklq6dz.jpg')
     api.run(host='10.235.65.12', port=80)
