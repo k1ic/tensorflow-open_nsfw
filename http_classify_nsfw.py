@@ -11,6 +11,7 @@ import hashlib
 import tensorflow as tf
 import numpy as np
 import time
+import requests
 import random
 import logging
 import timeit
@@ -26,6 +27,8 @@ api = Flask(__name__)
 
 @api.route('/classify_from_url', methods = ['GET'])
 def do_classify_from_url():
+    res = {'code': 10001, 'msg': 'failed', 'data':''}
+
     url = request.args.get('url', '')
     if re.match(r'^https?:/{2}\w.+$', url):
         #下载并暂存文件
@@ -33,19 +36,28 @@ def do_classify_from_url():
         filePath = downImgToLocal(url)
         logging.info('downImgToLocal() elapsed:' + str(timeit.default_timer() - start))
 
-        params = [__file__, '-m', 'data/open_nsfw-weights.npy', filePath]
+        if len(filePath) == 0:
+            res['msg'] = 'url http_code not 200'
+            return json.dumps(res)
 
         start = timeit.default_timer()
+        params = [__file__, '-m', 'data/open_nsfw-weights.npy', filePath]
         resClassify = doClassify(params)
         logging.info('doClassify() elapsed:' + str(timeit.default_timer() - start))
 
-        res = {}
-        res['url'] = url
-        res['score'] = resClassify
+        data = {}
+        data['url'] = url
+        data['score'] = resClassify
+
+        res['code'] = 10000
+        res['msg'] = 'success'
+        res['data'] = data
 
         return json.dumps(res)
     else:
-        return "Not valid url %s" %url
+        res['msg'] = 'Not valid url ' + url
+        return json.dumps(res)
+
 
 def md5(str):
     import hashlib
@@ -58,6 +70,9 @@ def downImgToLocal(url):
 
     if os.path.exists(tmpFileName):
         return tmpFileName
+
+    if requests.get(url).status_code != 200:
+        return ''
 
     with uRequest.urlopen(url) as web:
         # 为保险起见使用二进制写文件模式，防止编码错误
@@ -80,7 +95,7 @@ def doClassify(argv):
 
     config = tf.ConfigProto()
     #控制 GPU 显存使用
-    config.gpu_options.allow_growth = True
+    #config.gpu_options.allow_growth = True
     with tf.Session(config=config) as sess:
         input_type = InputType[args.input_type.upper()]
         model.build(weights_path=args.model_weights, input_type=input_type)
