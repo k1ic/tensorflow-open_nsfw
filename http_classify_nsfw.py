@@ -1,7 +1,8 @@
+#/usr/bin/env python
 # -*- coding: utf-8 -*-
 # test in python3.6 tensorflow-gpu1.8.0
 # 启动命令: gunicorn -c ../conf/gunicorn_80.conf http_classify_nsfw:api
-# test case: curl -s 'http://10.235.65.12/classify_from_url?url=https://pic4.zhimg.com/80/v2-d793ef70697509e624bc043457b67997_hd.jpg'
+# test case: curl -s 'http://172.16.103.136:9000/classify_from_url?url=https://pic4.zhimg.com/80/v2-d793ef70697509e624bc043457b67997_hd.jpg'
 import sys
 import os
 import json
@@ -9,6 +10,11 @@ import re
 import hashlib
 import tensorflow as tf
 import numpy as np
+import time
+import random
+import logging
+import timeit
+logging.basicConfig(filename='info.log', filemode="a", level=logging.INFO)
 
 from model import OpenNsfwModel, InputType
 from image_utils import create_tensorflow_image_loader
@@ -23,10 +29,15 @@ def do_classify_from_url():
     url = request.args.get('url', '')
     if re.match(r'^https?:/{2}\w.+$', url):
         #下载并暂存文件
+        start = timeit.default_timer()
         filePath = downImgToLocal(url)
+        logging.info('downImgToLocal() elapsed:' + str(timeit.default_timer() - start))
 
         params = [__file__, '-m', 'data/open_nsfw-weights.npy', filePath]
+
+        start = timeit.default_timer()
         resClassify = doClassify(params)
+        logging.info('doClassify() elapsed:' + str(timeit.default_timer() - start))
 
         res = {}
         res['url'] = url
@@ -43,7 +54,7 @@ def md5(str):
     return m.hexdigest()
 
 def downImgToLocal(url):
-    tmpFileName = '/tmp/' + md5(url) + '.jpg'
+    tmpFileName = '/tmp/' + md5(url + str(round(time.time() * 1000)) + str(random.randint(10000, 99999))) + '.jpg'
 
     if os.path.exists(tmpFileName):
         return tmpFileName
@@ -69,7 +80,7 @@ def doClassify(argv):
 
     config = tf.ConfigProto()
     #控制 GPU 显存使用
-    config.gpu_options.allow_growth = True
+    #config.gpu_options.allow_growth = True
     with tf.Session(config=config) as sess:
         input_type = InputType[args.input_type.upper()]
         model.build(weights_path=args.model_weights, input_type=input_type)
@@ -80,6 +91,7 @@ def doClassify(argv):
             if args.image_loader == IMAGE_LOADER_TENSORFLOW:
                 fn_load_image = create_tensorflow_image_loader(tf.Session(graph=tf.Graph()))
             else:
+                #elapsed 3s
                 fn_load_image = create_yahoo_image_loader()
         elif input_type == InputType.BASE64_JPEG:
             import base64
@@ -89,6 +101,7 @@ def doClassify(argv):
 
         image = fn_load_image(args.input_file)
 
+        # elapsed 450ms
         predictions = \
             sess.run(model.predictions,
                      feed_dict={model.input: image})
@@ -107,4 +120,4 @@ def doClassify(argv):
     return res
 
 if __name__ == "__main__":
-    api.run(host='10.235.65.12', port=80)
+    api.run(host='172.16.103.136', port=9000)
