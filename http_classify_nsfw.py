@@ -80,7 +80,7 @@ def doClassify(argv):
 
     config = tf.ConfigProto()
     #控制 GPU 显存使用
-    #config.gpu_options.allow_growth = True
+    config.gpu_options.allow_growth = True
     with tf.Session(config=config) as sess:
         input_type = InputType[args.input_type.upper()]
         model.build(weights_path=args.model_weights, input_type=input_type)
